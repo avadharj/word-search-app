@@ -8,14 +8,98 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @AppStorage("soundEnabled") private var soundEnabled = true
+    @AppStorage("hapticsEnabled") private var hapticsEnabled = true
+    @AppStorage("difficulty") private var difficulty = "Medium"
+    @State private var showAbout = false
+    
     var body: some View {
         List {
-            Section("Settings") {
-                // TODO: Add settings options
-                Text("Settings placeholder")
+            Section("Game Settings") {
+                Toggle(isOn: $soundEnabled) {
+                    Label("Sound Effects", systemImage: "speaker.wave.2.fill")
+                }
+                
+                Toggle(isOn: $hapticsEnabled) {
+                    Label("Haptic Feedback", systemImage: "hand.tap.fill")
+                }
+                
+                Picker("Difficulty", selection: $difficulty) {
+                    Text("Easy").tag("Easy")
+                    Text("Medium").tag("Medium")
+                    Text("Hard").tag("Hard")
+                }
+            }
+            
+            Section("About") {
+                Button(action: {
+                    showAbout = true
+                }) {
+                    Label("About", systemImage: "info.circle.fill")
+                }
+                
+                HStack {
+                    Label("Version", systemImage: "app.badge")
+                    Spacer()
+                    Text("1.0.0")
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            Section("Account") {
+                Button(action: {
+                    // TODO: Implement sign in
+                }) {
+                    Label("Sign In", systemImage: "person.circle.fill")
+                }
+                
+                Button(action: {
+                    // TODO: Implement leaderboard sync
+                }) {
+                    Label("Sync Progress", systemImage: "arrow.clockwise.circle.fill")
+                }
             }
         }
         .navigationTitle("Settings")
+        .sheet(isPresented: $showAbout) {
+            AboutView()
+        }
+    }
+}
+
+struct AboutView: View {
+    @Environment(\.dismiss) var dismiss
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 24) {
+                Image(systemName: "cube.fill")
+                    .font(.system(size: 60))
+                    .foregroundColor(.accentColor)
+                
+                Text("Word Search")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                
+                Text("An iOS word search game played on a vanishing cube. Connect touching letters to form words, the longer the better!")
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+                
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("About")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
 
