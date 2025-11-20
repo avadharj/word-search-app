@@ -119,8 +119,6 @@ struct CubeView: UIViewRepresentable {
         
         // Create letter nodes
         for (index, letter) in cube.letters.enumerated() {
-            guard !letter.isRemoved else { continue }
-            
             let letterNode = createLetterNode(
                 letter: letter,
                 index: index,
@@ -146,7 +144,12 @@ struct CubeView: UIViewRepresentable {
         let boxSize: CGFloat = 0.8
         let box = SCNBox(width: boxSize, height: boxSize, length: boxSize, chamferRadius: 0.15)
         let boxMaterial = SCNMaterial()
-        if isSelected {
+        
+        // Color based on state
+        if letter.isRemoved {
+            boxMaterial.diffuse.contents = UIColor.systemGray
+            boxMaterial.emission.contents = UIColor.systemGray.withAlphaComponent(0.2)
+        } else if isSelected {
             boxMaterial.diffuse.contents = UIColor.systemBlue
             boxMaterial.emission.contents = UIColor.systemBlue.withAlphaComponent(0.5)
         } else {
@@ -161,8 +164,25 @@ struct CubeView: UIViewRepresentable {
         let boxNode = SCNNode(geometry: box)
         boxNode.position = SCNVector3(0, 0, 0)
         
+        // Add selection animation
+        if isSelected && !letter.isRemoved {
+            let scaleUp = SCNAction.scale(to: 1.15, duration: 0.2)
+            let scaleDown = SCNAction.scale(to: 1.0, duration: 0.2)
+            let pulse = SCNAction.sequence([scaleUp, scaleDown])
+            boxNode.runAction(SCNAction.repeatForever(pulse), forKey: "selectionPulse")
+        }
+        
+        // Add removal animation
+        if letter.isRemoved {
+            let fadeOut = SCNAction.fadeOut(duration: 0.5)
+            let scaleDown = SCNAction.scale(to: 0.1, duration: 0.5)
+            let remove = SCNAction.removeFromParentNode()
+            let sequence = SCNAction.sequence([SCNAction.group([fadeOut, scaleDown]), remove])
+            node.runAction(sequence)
+        }
+        
         // Create text using a plane with text rendered as an image - more reliable
-        let textImage = createTextImage(character: letter.character, isSelected: isSelected)
+        let textImage = createTextImage(character: letter.character, isSelected: isSelected, isRemoved: letter.isRemoved)
         let textPlane = SCNPlane(width: 0.6, height: 0.6)
         let textMaterial = SCNMaterial()
         textMaterial.diffuse.contents = textImage
@@ -191,23 +211,32 @@ struct CubeView: UIViewRepresentable {
         return node
     }
     
-    private func createTextImage(character: Character, isSelected: Bool) -> UIImage {
+    private func createTextImage(character: Character, isSelected: Bool, isRemoved: Bool = false) -> UIImage {
         let size = CGSize(width: 200, height: 200)
         let renderer = UIGraphicsImageRenderer(size: size)
         
         return renderer.image { context in
             // Fill background
-            if isSelected {
-                UIColor.systemBlue.setFill()
+            var bgColor: UIColor
+            var textColor: UIColor
+            
+            if isRemoved {
+                bgColor = UIColor.systemGray
+                textColor = UIColor.systemGray3
+            } else if isSelected {
+                bgColor = UIColor.systemBlue
+                textColor = UIColor.white
             } else {
-                UIColor.white.setFill()
+                bgColor = UIColor.white
+                textColor = UIColor.black
             }
+            
+            bgColor.setFill()
             context.fill(CGRect(origin: .zero, size: size))
             
             // Draw text
             let text = String(character).uppercased()
             let font = UIFont.systemFont(ofSize: 120, weight: .bold)
-            let textColor = isSelected ? UIColor.white : UIColor.black
             
             let paragraphStyle = NSMutableParagraphStyle()
             paragraphStyle.alignment = .center

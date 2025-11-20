@@ -111,30 +111,8 @@ struct Puzzle {
     let cube: Cube
     let validWords: Set<String>
     
-    static func generate(size: Int = 3) -> Puzzle {
-        let cube = Cube(size: size)
-        
-        // Generate random letters for the cube
-        let letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        var cubeLetters: [Letter] = []
-        
-        let totalCells = size * size * size
-        for i in 0..<totalCells {
-            let randomChar = letters.randomElement() ?? "A"
-            let letter = Letter(
-                id: i,
-                character: randomChar,
-                position: calculatePosition(index: i, size: size),
-                usageCount: 0
-            )
-            cubeLetters.append(letter)
-        }
-        
-        cube.letters = cubeLetters
-        
-        // For now, return empty valid words set
-        // In a full implementation, this would embed valid words
-        return Puzzle(cube: cube, validWords: Set<String>())
+    static func generate(size: Int = 3, difficulty: Difficulty = .medium) -> Puzzle {
+        return PuzzleGenerator.shared.generatePuzzle(size: size, difficulty: difficulty)
     }
     
     static func calculatePosition(index: Int, size: Int) -> SIMD3<Float> {

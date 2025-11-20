@@ -6,17 +6,25 @@
 //
 
 import SwiftUI
+import Combine
 
 struct GameView: View {
     @Binding var navigationPath: NavigationPath
     @StateObject private var gameState: GameState
     @State private var showResults = false
     @State private var gameEngine = GameEngine()
+    @State private var showWordFoundAnimation = false
+    @State private var lastFoundWord = ""
     
     init(navigationPath: Binding<NavigationPath>) {
         self._navigationPath = navigationPath
-        // Initialize with a new puzzle
-        let puzzle = Puzzle.generate(size: 3)
+        // Get difficulty from settings
+        let difficultyString = UserDefaults.standard.string(forKey: "difficulty") ?? "Medium"
+        let difficulty = Difficulty(rawValue: difficultyString) ?? .medium
+        let size = difficulty.cubeSize
+        
+        // Initialize with a new puzzle based on difficulty
+        let puzzle = Puzzle.generate(size: size, difficulty: difficulty)
         self._gameState = StateObject(wrappedValue: GameState(cube: puzzle.cube))
     }
     
@@ -35,6 +43,7 @@ struct GameView: View {
                         Text("\(gameState.score)")
                             .font(.title2)
                             .fontWeight(.bold)
+                            .contentTransition(.numericText())
                     }
                     
                     Spacer()
@@ -46,12 +55,15 @@ struct GameView: View {
                         Text("\(gameState.wordsFound.count)")
                             .font(.title2)
                             .fontWeight(.bold)
+                            .contentTransition(.numericText())
                     }
                 }
                 .padding()
                 .background(Color(.systemBackground))
                 .cornerRadius(12)
                 .padding(.horizontal)
+                .animation(.spring(response: 0.3), value: gameState.score)
+                .animation(.spring(response: 0.3), value: gameState.wordsFound.count)
                 
                 // 3D Cube View
                 CubeView(gameState: gameState) { index in
@@ -75,6 +87,8 @@ struct GameView: View {
                     .background(Color(.systemBackground))
                     .cornerRadius(12)
                     .padding(.horizontal)
+                    .transition(.scale.combined(with: .opacity))
+                    .animation(.spring(response: 0.3), value: gameState.currentWord)
                 }
                 
                 // Found Words List
@@ -87,12 +101,23 @@ struct GameView: View {
                                     .fontWeight(.semibold)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 6)
-                                    .background(Color.accentColor.opacity(0.2))
+                                    .background(Color.accentColor.opacity(word == lastFoundWord && showWordFoundAnimation ? 0.6 : 0.2))
                                     .foregroundColor(.accentColor)
                                     .cornerRadius(8)
+                                    .scaleEffect(word == lastFoundWord && showWordFoundAnimation ? 1.2 : 1.0)
+                                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showWordFoundAnimation)
                             }
                         }
                         .padding(.horizontal)
+                    }
+                    .onChange(of: gameState.wordsFound.count) { _ in
+                        if let lastWord = gameState.wordsFound.last {
+                            lastFoundWord = lastWord
+                            showWordFoundAnimation = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                showWordFoundAnimation = false
+                            }
+                        }
                     }
                 }
                 
@@ -111,6 +136,8 @@ struct GameView: View {
                     }
                     
                     Button(action: {
+                        SoundManager.shared.playSound("gameComplete")
+                        SoundManager.shared.playHaptic(.success)
                         showResults = true
                     }) {
                         Label("End Game", systemImage: "xmark.circle.fill")
@@ -175,6 +202,10 @@ struct GameView: View {
                     wordsFound: gameState.wordsFound
                 )
             }
+        }
+        .onAppear {
+            // Play game start sound
+            SoundManager.shared.playHaptic(.medium)
         }
     }
 }

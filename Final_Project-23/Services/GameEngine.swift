@@ -9,6 +9,7 @@ import Foundation
 
 class GameEngine {
     let wordValidator = WordValidator.shared
+    let soundManager = SoundManager.shared
     
     func canSelectLetter(at index: Int, selectedIndices: [Int], cube: Cube) -> Bool {
         // First letter can always be selected
@@ -43,6 +44,10 @@ class GameEngine {
             // Add to selection
             gameState.selectedIndices.append(index)
             
+            // Play selection sound and haptic
+            soundManager.playSound("letterSelect")
+            soundManager.playHaptic(.light)
+            
             // Build current word
             let word = buildWord(from: gameState.selectedIndices, cube: cube)
             gameState.currentWord = word
@@ -52,9 +57,23 @@ class GameEngine {
                 // Word is valid - add it
                 gameState.addWord(word)
                 
+                // Play success sound and haptic
+                soundManager.playSound("wordFound")
+                soundManager.playHaptic(.success)
+                
                 // Mark letters as used
                 for selectedIndex in gameState.selectedIndices {
                     gameState.cube.useLetter(at: selectedIndex)
+                }
+                
+                // Check if any letters were removed
+                let removedCount = gameState.selectedIndices.filter { 
+                    cube.letter(at: $0)?.isRemoved == true 
+                }.count
+                
+                if removedCount > 0 {
+                    soundManager.playSound("letterRemove")
+                    soundManager.playHaptic(.medium)
                 }
                 
                 // Reset selection
@@ -63,6 +82,8 @@ class GameEngine {
                 // Check if it's a valid prefix
                 if !wordValidator.isPrefix(word) {
                     // Invalid prefix - reset selection
+                    soundManager.playSound("wordInvalid")
+                    soundManager.playHaptic(.error)
                     gameState.resetSelection()
                 }
             }
@@ -72,7 +93,11 @@ class GameEngine {
                 gameState.selectedIndices = Array(gameState.selectedIndices[..<position])
                 let word = buildWord(from: gameState.selectedIndices, cube: cube)
                 gameState.currentWord = word
+                soundManager.playHaptic(.light)
             }
+        } else {
+            // Invalid selection
+            soundManager.playHaptic(.error)
         }
     }
 }

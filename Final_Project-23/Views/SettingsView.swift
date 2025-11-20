@@ -8,30 +8,53 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @AppStorage("soundEnabled") private var soundEnabled = true
-    @AppStorage("hapticsEnabled") private var hapticsEnabled = true
+    @ObservedObject private var soundManager = SoundManager.shared
     @AppStorage("difficulty") private var difficulty = "Medium"
     @State private var showAbout = false
+    @State private var showHelp = false
     
     var body: some View {
         List {
             Section("Game Settings") {
-                Toggle(isOn: $soundEnabled) {
+                Toggle(isOn: $soundManager.soundEnabled) {
                     Label("Sound Effects", systemImage: "speaker.wave.2.fill")
                 }
+                .onChange(of: soundManager.soundEnabled) { _ in
+                    if soundManager.soundEnabled {
+                        SoundManager.shared.playSound("letterSelect")
+                    }
+                }
                 
-                Toggle(isOn: $hapticsEnabled) {
+                Toggle(isOn: $soundManager.hapticsEnabled) {
                     Label("Haptic Feedback", systemImage: "hand.tap.fill")
+                }
+                .onChange(of: soundManager.hapticsEnabled) { _ in
+                    if soundManager.hapticsEnabled {
+                        SoundManager.shared.playHaptic(.medium)
+                    }
                 }
                 
                 Picker("Difficulty", selection: $difficulty) {
-                    Text("Easy").tag("Easy")
-                    Text("Medium").tag("Medium")
-                    Text("Hard").tag("Hard")
+                    ForEach(Difficulty.allCases, id: \.self) { diff in
+                        Text(diff.rawValue).tag(diff.rawValue)
+                    }
+                }
+                
+                HStack {
+                    Text("Cube Size")
+                    Spacer()
+                    Text(Difficulty(rawValue: difficulty)?.cubeSize.description ?? "3")
+                        .foregroundColor(.secondary)
                 }
             }
             
-            Section("About") {
+            Section("Help") {
+                Button(action: {
+                    showHelp = true
+                }) {
+                    Label("How to Play", systemImage: "questionmark.circle.fill")
+                }
+                
                 Button(action: {
                     showAbout = true
                 }) {
@@ -63,6 +86,9 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .sheet(isPresented: $showAbout) {
             AboutView()
+        }
+        .sheet(isPresented: $showHelp) {
+            HelpView()
         }
     }
 }
