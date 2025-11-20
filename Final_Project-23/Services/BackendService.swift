@@ -19,8 +19,8 @@ class BackendService {
     private var authToken: AuthToken?
     
     private init() {
-        // TODO: Set this to your actual backend URL
-        // For development, you can use localhost or a staging server
+        // Set backend URL - defaults to localhost for development
+        // For production, set BACKEND_URL environment variable or update here
         self.baseURL = ProcessInfo.processInfo.environment["BACKEND_URL"] ?? "http://localhost:8080"
         
         let config = URLSessionConfiguration.default
@@ -44,7 +44,7 @@ class BackendService {
     // MARK: - Authentication
     
     func authenticate(username: String, password: String) async throws -> AuthToken {
-        let endpoint = APIEndpoint.auth.rawValue
+        let endpoint = "/api/auth/login"  // Updated to match server route
         let url = URL(string: "\(baseURL)\(endpoint)")!
         
         var request = URLRequest(url: url)
@@ -175,7 +175,27 @@ class BackendService {
             throw BackendError.serverError("Failed to fetch leaderboard with status \(httpResponse.statusCode)")
         }
         
-        let leaderboard = try JSONDecoder().decode([LeaderboardEntry].self, from: data)
+        // Decode server response format
+        struct ServerLeaderboardEntry: Codable {
+            let id: UUID
+            let playerName: String
+            let score: Int
+            let wordsFound: Int
+            let date: Date
+            let rank: Int
+        }
+        
+        let serverEntries = try JSONDecoder().decode([ServerLeaderboardEntry].self, from: data)
+        let leaderboard = serverEntries.map { entry in
+            LeaderboardEntry(
+                id: entry.id,
+                playerName: entry.playerName,
+                score: entry.score,
+                wordsFound: entry.wordsFound,
+                date: entry.date,
+                rank: entry.rank
+            )
+        }
         return leaderboard
     }
     

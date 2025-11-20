@@ -59,6 +59,9 @@ struct LeaderboardView: View {
         .onAppear {
             loadLeaderboard()
         }
+        .refreshable {
+            loadLeaderboard()
+        }
     }
     
     private func loadLeaderboard() {
