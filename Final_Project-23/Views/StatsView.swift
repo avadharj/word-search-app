@@ -8,12 +8,13 @@
 import SwiftUI
 
 struct StatsView: View {
-    // TODO: Replace with actual data from game state
-    @State private var totalGames = 0
-    @State private var totalWords = 0
-    @State private var highScore = 0
-    @State private var averageScore = 0
-    @State private var longestWord = ""
+    @State private var statistics = DataPersistence.shared.loadStatistics()
+    @State private var averageScore: Int = 0
+    
+    private var calculatedAverageScore: Int {
+        guard statistics.totalGames > 0 else { return 0 }
+        return statistics.totalScore / statistics.totalGames
+    }
     
     var body: some View {
         List {
@@ -21,35 +22,35 @@ struct StatsView: View {
                 StatRow(
                     icon: "gamecontroller.fill",
                     title: "Games Played",
-                    value: "\(totalGames)",
+                    value: "\(statistics.totalGames)",
                     color: .blue
                 )
                 
                 StatRow(
                     icon: "text.word.spacing",
                     title: "Words Found",
-                    value: "\(totalWords)",
+                    value: "\(statistics.totalWords)",
                     color: .green
                 )
                 
                 StatRow(
                     icon: "star.fill",
                     title: "High Score",
-                    value: "\(highScore)",
+                    value: "\(statistics.highScore)",
                     color: .orange
                 )
                 
                 StatRow(
                     icon: "chart.line.uptrend.xyaxis",
                     title: "Average Score",
-                    value: "\(averageScore)",
+                    value: "\(calculatedAverageScore)",
                     color: .purple
                 )
                 
                 StatRow(
                     icon: "textformat.size",
                     title: "Longest Word",
-                    value: longestWord.isEmpty ? "—" : longestWord.uppercased(),
+                    value: statistics.longestWord.isEmpty ? "—" : statistics.longestWord.uppercased(),
                     color: .red
                 )
             }
@@ -58,21 +59,21 @@ struct StatsView: View {
                 AchievementRow(
                     title: "First Word",
                     description: "Find your first word",
-                    isUnlocked: totalWords > 0,
+                    isUnlocked: statistics.totalWords > 0,
                     icon: "trophy.fill"
                 )
                 
                 AchievementRow(
                     title: "Word Master",
                     description: "Find 100 words",
-                    isUnlocked: totalWords >= 100,
+                    isUnlocked: statistics.totalWords >= 100,
                     icon: "crown.fill"
                 )
                 
                 AchievementRow(
                     title: "High Scorer",
                     description: "Score over 1000 points",
-                    isUnlocked: highScore >= 1000,
+                    isUnlocked: statistics.highScore >= 1000,
                     icon: "star.circle.fill"
                 )
             }
@@ -92,6 +93,9 @@ struct StatsView: View {
             }
         }
         .navigationTitle("Statistics")
+        .onAppear {
+            statistics = DataPersistence.shared.loadStatistics()
+        }
     }
 }
 

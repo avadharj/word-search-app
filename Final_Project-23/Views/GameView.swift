@@ -9,10 +9,16 @@ import SwiftUI
 
 struct GameView: View {
     @Binding var navigationPath: NavigationPath
-    @State private var score = 0
-    @State private var wordsFound = 0
-    @State private var currentWord = ""
+    @StateObject private var gameState: GameState
     @State private var showResults = false
+    @State private var gameEngine = GameEngine()
+    
+    init(navigationPath: Binding<NavigationPath>) {
+        self._navigationPath = navigationPath
+        // Initialize with a new puzzle
+        let puzzle = Puzzle.generate(size: 3)
+        self._gameState = StateObject(wrappedValue: GameState(cube: puzzle.cube))
+    }
     
     var body: some View {
         ZStack {
@@ -26,7 +32,7 @@ struct GameView: View {
                         Text("Score")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        Text("\(score)")
+                        Text("\(gameState.score)")
                             .font(.title2)
                             .fontWeight(.bold)
                     }
@@ -37,7 +43,7 @@ struct GameView: View {
                         Text("Words Found")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        Text("\(wordsFound)")
+                        Text("\(gameState.wordsFound.count)")
                             .font(.title2)
                             .fontWeight(.bold)
                     }
@@ -47,37 +53,20 @@ struct GameView: View {
                 .cornerRadius(12)
                 .padding(.horizontal)
                 
-                // Game Area Placeholder
-                ZStack {
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(Color(.systemBackground))
-                        .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
-                    
-                    VStack(spacing: 20) {
-                        Image(systemName: "cube.fill")
-                            .font(.system(size: 80))
-                            .foregroundColor(.accentColor)
-                        
-                        Text("Game Cube")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                        
-                        Text("Game logic will be implemented here")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                    }
+                // 3D Cube View
+                CubeView(gameState: gameState) { index in
+                    gameEngine.processWordSelection(at: index, gameState: gameState)
                 }
                 .frame(height: 400)
+                .cornerRadius(20)
                 .padding(.horizontal)
                 
                 // Current Word Display
-                if !currentWord.isEmpty {
+                if !gameState.currentWord.isEmpty {
                     HStack {
                         Text("Current Word:")
                             .font(.headline)
-                        Text(currentWord.uppercased())
+                        Text(gameState.currentWord.uppercased())
                             .font(.title3)
                             .fontWeight(.bold)
                             .foregroundColor(.accentColor)
@@ -88,12 +77,31 @@ struct GameView: View {
                     .padding(.horizontal)
                 }
                 
+                // Found Words List
+                if !gameState.wordsFound.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(gameState.wordsFound, id: \.self) { word in
+                                Text(word.uppercased())
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(Color.accentColor.opacity(0.2))
+                                    .foregroundColor(.accentColor)
+                                    .cornerRadius(8)
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+                }
+                
                 // Action Buttons
                 HStack(spacing: 16) {
                     Button(action: {
-                        // TODO: Implement pause/resume
+                        gameState.isPaused.toggle()
                     }) {
-                        Label("Pause", systemImage: "pause.fill")
+                        Label(gameState.isPaused ? "Resume" : "Pause", systemImage: gameState.isPaused ? "play.fill" : "pause.fill")
                             .font(.headline)
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
@@ -103,7 +111,6 @@ struct GameView: View {
                     }
                     
                     Button(action: {
-                        // TODO: Implement end game
                         showResults = true
                     }) {
                         Label("End Game", systemImage: "xmark.circle.fill")
@@ -120,15 +127,54 @@ struct GameView: View {
                 Spacer()
             }
             .padding(.top)
+            .disabled(gameState.isPaused)
+            .overlay {
+                if gameState.isPaused {
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+                    
+                    VStack {
+                        Text("Paused")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                        
+                        Button("Resume") {
+                            gameState.isPaused = false
+                        }
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding()
+                        .background(Color.accentColor)
+                        .cornerRadius(12)
+                        .padding(.top)
+                    }
+                    .padding()
+                    .background(Color(.systemBackground))
+                    .cornerRadius(20)
+                    .shadow(radius: 10)
+                }
+            }
         }
         .navigationTitle("Game")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showResults) {
             GameResultsView(
-                score: score,
-                wordsFound: wordsFound,
+                score: gameState.score,
+                wordsFound: gameState.wordsFound.count,
                 navigationPath: $navigationPath
             )
+            .onAppear {
+                // Save game statistics when results are shown
+                DataPersistence.shared.updateStatistics(
+                    score: gameState.score,
+                    wordsFound: gameState.wordsFound
+                )
+                DataPersistence.shared.saveGameRecord(
+                    score: gameState.score,
+                    wordsFound: gameState.wordsFound
+                )
+            }
         }
     }
 }
