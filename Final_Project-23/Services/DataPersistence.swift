@@ -104,23 +104,20 @@ class DataPersistence {
         return history
     }
     
-    // MARK: - Future PostgreSQL Sync Methods
-    // These will be implemented when backend is ready
+    // MARK: - PostgreSQL Sync Methods
     
     func syncStatisticsToBackend() async throws {
-        // TODO: Implement PostgreSQL sync
-        // This will sync local statistics to the PostgreSQL database
+        let stats = loadStatistics()
+        try await BackendService.shared.syncStatistics(stats)
     }
     
     func syncGameHistoryToBackend() async throws {
-        // TODO: Implement PostgreSQL sync
-        // This will sync game history to the PostgreSQL database
+        let history = loadGameHistory()
+        try await BackendService.shared.syncGameHistory(history)
     }
     
     func loadLeaderboard() async throws -> [LeaderboardEntry] {
-        // TODO: Implement PostgreSQL query
-        // This will fetch leaderboard data from PostgreSQL
-        return []
+        return try await BackendService.shared.fetchLeaderboard(limit: 100)
     }
 }
 

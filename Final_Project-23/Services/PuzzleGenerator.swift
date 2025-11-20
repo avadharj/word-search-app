@@ -9,7 +9,7 @@ import Foundation
 
 class PuzzleGenerator {
     static let shared = PuzzleGenerator()
-    private let wordValidator = WordValidator.shared
+    private let dictionaryClient = DictionaryClient.shared
     
     // Common words that are easier to embed in puzzles
     private let commonWords = [
@@ -87,7 +87,7 @@ class PuzzleGenerator {
         
         let filteredWords = commonWords.filter { word in
             word.count >= minWordLength && word.count <= maxWordLength &&
-            wordValidator.isValidWord(word)
+            dictionaryClient.isValidWord(word)
         }
         
         return Array(filteredWords.shuffled().prefix(maxWords))

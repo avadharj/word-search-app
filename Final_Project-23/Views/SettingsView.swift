@@ -12,6 +12,7 @@ struct SettingsView: View {
     @AppStorage("difficulty") private var difficulty = "Medium"
     @State private var showAbout = false
     @State private var showHelp = false
+    @State private var showAuth = false
     
     var body: some View {
         List {
@@ -70,17 +71,37 @@ struct SettingsView: View {
             }
             
             Section("Account") {
-                Button(action: {
-                    // TODO: Implement sign in
-                }) {
-                    Label("Sign In", systemImage: "person.circle.fill")
+                if BackendService.shared.isAuthenticated {
+                    HStack {
+                        Label("Signed In", systemImage: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                        Spacer()
+                        Button("Sign Out") {
+                            BackendService.shared.logout()
+                        }
+                        .foregroundColor(.red)
+                    }
+                } else {
+                    Button(action: {
+                        showAuth = true
+                    }) {
+                        Label("Sign In", systemImage: "person.circle.fill")
+                    }
                 }
                 
                 Button(action: {
-                    // TODO: Implement leaderboard sync
+                    Task {
+                        do {
+                            try await DataPersistence.shared.syncStatisticsToBackend()
+                            try await DataPersistence.shared.syncGameHistoryToBackend()
+                        } catch {
+                            print("Sync failed: \(error)")
+                        }
+                    }
                 }) {
                     Label("Sync Progress", systemImage: "arrow.clockwise.circle.fill")
                 }
+                .disabled(!BackendService.shared.isAuthenticated)
             }
         }
         .navigationTitle("Settings")
@@ -89,6 +110,9 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showHelp) {
             HelpView()
+        }
+        .sheet(isPresented: $showAuth) {
+            AuthenticationView()
         }
     }
 }

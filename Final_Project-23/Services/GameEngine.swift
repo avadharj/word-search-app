@@ -8,7 +8,7 @@
 import Foundation
 
 class GameEngine {
-    let wordValidator = WordValidator.shared
+    let dictionaryClient = DictionaryClient.shared
     let soundManager = SoundManager.shared
     
     func canSelectLetter(at index: Int, selectedIndices: [Int], cube: Cube) -> Bool {
@@ -27,7 +27,7 @@ class GameEngine {
         let uppercaseWord = word.uppercased()
         guard uppercaseWord.count >= 3 else { return false }
         guard !foundWords.contains(uppercaseWord) else { return false }
-        return wordValidator.isValidWord(uppercaseWord)
+        return dictionaryClient.isValidWord(uppercaseWord)
     }
     
     func buildWord(from indices: [Int], cube: Cube) -> String {
@@ -80,7 +80,7 @@ class GameEngine {
                 gameState.resetSelection()
             } else {
                 // Check if it's a valid prefix
-                if !wordValidator.isPrefix(word) {
+                if !dictionaryClient.isPrefix(word) {
                     // Invalid prefix - reset selection
                     soundManager.playSound("wordInvalid")
                     soundManager.playHaptic(.error)

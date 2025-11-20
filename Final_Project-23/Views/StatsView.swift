@@ -79,17 +79,19 @@ struct StatsView: View {
             }
             
             Section("Leaderboard") {
-                HStack {
-                    Image(systemName: "chart.bar.fill")
-                        .foregroundColor(.secondary)
-                    Text("Global Leaderboard")
-                    Spacer()
-                    Text("Coming Soon")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                if BackendService.shared.isAuthenticated {
+                    LeaderboardView()
+                } else {
+                    HStack {
+                        Image(systemName: "chart.bar.fill")
+                            .foregroundColor(.secondary)
+                        Text("Global Leaderboard")
+                        Spacer()
+                        Text("Sign in to view")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
-                
-                // TODO: Add leaderboard entries when backend is ready
             }
         }
         .navigationTitle("Statistics")
