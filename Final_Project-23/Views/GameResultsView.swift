@@ -55,6 +55,9 @@ struct GameResultsView: View {
                     // Action Buttons
                     VStack(spacing: 12) {
                         Button(action: {
+
+                            SoundManager.shared.playHaptic(.medium)
+
                             dismiss()
                             navigationPath.removeLast()
                         }) {
@@ -68,6 +71,10 @@ struct GameResultsView: View {
                         }
                         
                         Button(action: {
+
+
+                            SoundManager.shared.playHaptic(.light)
+
                             dismiss()
                             navigationPath = NavigationPath()
                         }) {

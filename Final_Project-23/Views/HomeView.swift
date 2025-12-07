@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 
 struct HomeView: View {
     @State private var navigationPath = NavigationPath()
@@ -42,6 +43,8 @@ struct HomeView: View {
                             icon: "gamecontroller.fill",
                             color: .blue
                         ) {
+
+                            SoundManager.shared.playHaptic(.medium)
                             navigationPath.append("game")
                         }
                         
@@ -51,6 +54,9 @@ struct HomeView: View {
                             icon: "chart.bar.fill",
                             color: .green
                         ) {
+
+                            SoundManager.shared.playHaptic(.light)
+
                             navigationPath.append("stats")
                         }
                         
@@ -60,6 +66,9 @@ struct HomeView: View {
                             icon: "gearshape.fill",
                             color: .gray
                         ) {
+
+                            SoundManager.shared.playHaptic(.light)
+
                             navigationPath.append("settings")
                         }
                     }
