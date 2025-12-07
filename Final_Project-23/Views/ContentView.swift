@@ -6,7 +6,7 @@
 //
 
 import SwiftUI
-
+// The view for all the contents
 struct ContentView: View {
     @State private var hasSeenOnboarding = UserDefaults.standard.bool(forKey: "hasSeenOnboarding")
     
