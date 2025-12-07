@@ -21,5 +21,7 @@
 			</array>
 		</dict>
 	</dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>We use your location to show regional leaderboards and location-based statistics. Your location helps us provide you with relevant local rankings and game insights.</string>
 </dict>
 </plist>

@@ -76,6 +76,30 @@ struct SettingsView: View {
             }
             // ----------------------------------
             
+            Section("Location Services") {
+                HStack {
+                    Label("Location Access", systemImage: "location.fill")
+                    Spacer()
+                    if LocationManager.shared.isAuthorized {
+                        Text("Enabled")
+                            .foregroundColor(.green)
+                            .font(.caption)
+                    } else {
+                        Text("Disabled")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                    }
+                }
+                
+                if !LocationManager.shared.isAuthorized {
+                    Button(action: {
+                        LocationManager.shared.requestLocationPermission()
+                    }) {
+                        Label("Enable Location", systemImage: "location.circle.fill")
+                    }
+                }
+            }
+            
             Section("Account") {
                 // --- CONFLICT RESOLVED: KEEPING DEV'S SIGN IN/OUT LOGIC ---
                 if BackendService.shared.isAuthenticated {

@@ -1,8 +1,8 @@
 //
-//  StatsView.swift
-//  Final_Project-23
+//  StatsView.swift
+//  Final_Project-23
 //
-//  Created by Arjun Avadhani on 11/15/25.
+//  Created by Arjun Avadhani on 11/15/25.
 //
 
 import SwiftUI
@@ -11,6 +11,7 @@ struct StatsView: View {
     // --- CONFLICT RESOLVED: KEEPING DEV'S PERSISTENCE LOGIC ---
     @State private var statistics = DataPersistence.shared.loadStatistics()
     @State private var averageScore: Int = 0
+    @ObservedObject private var locationManager = LocationManager.shared
     
     private var calculatedAverageScore: Int {
         guard statistics.totalGames > 0 else { return 0 }
@@ -96,6 +97,52 @@ struct StatsView: View {
                 )
             }
             
+            Section("Location") {
+                if locationManager.isAuthorized {
+                    if locationManager.isLoading {
+                        HStack {
+                            ProgressView()
+                            Text("Getting location...")
+                                .foregroundColor(.secondary)
+                        }
+                    } else if let error = locationManager.errorMessage {
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                            Text(error)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    } else if locationManager.hasLocation {
+                        StatRow(
+                            icon: "location.fill",
+                            title: "Your Location",
+                            value: locationManager.locationName,
+                            color: .blue
+                        )
+                        
+                        StatRow(
+                            icon: "mappin.circle.fill",
+                            title: "Coordinates",
+                            value: locationManager.formattedCoordinates,
+                            color: .green
+                        )
+                    } else {
+                        Button(action: {
+                            locationManager.startLocationUpdates()
+                        }) {
+                            Label("Enable Location", systemImage: "location.circle.fill")
+                        }
+                    }
+                } else {
+                    Button(action: {
+                        locationManager.requestLocationPermission()
+                    }) {
+                        Label("Enable Location Services", systemImage: "location.slash.fill")
+                    }
+                }
+            }
+            
             Section("Leaderboard") {
                 // --- CONFLICT RESOLVED: KEEPING DEV'S LEADERBOARD LOGIC ---
                 if BackendService.shared.isAuthenticated {
@@ -118,6 +165,10 @@ struct StatsView: View {
         // --- CONFLICT RESOLVED: KEEPING DEV'S ONAPPEAR REFRESH ---
         .onAppear {
             statistics = DataPersistence.shared.loadStatistics()
+            // Request location if authorized
+            if locationManager.isAuthorized && !locationManager.hasLocation {
+                locationManager.startLocationUpdates()
+            }
         }
         // ----------------------------------------------------------
     }
