@@ -57,27 +57,62 @@ class BackendService {
         ]
         request.httpBody = try JSONEncoder().encode(body)
         
-        let (data, response) = try await session.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw BackendError.invalidResponse
-        }
-        
-        guard httpResponse.statusCode == 200 else {
-            if httpResponse.statusCode == 401 {
-                throw BackendError.authenticationFailed
+        do {
+            let (data, response) = try await session.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw BackendError.invalidResponse
             }
-            throw BackendError.serverError("Authentication failed with status \(httpResponse.statusCode)")
+            
+            guard httpResponse.statusCode == 200 else {
+                if httpResponse.statusCode == 401 {
+                    throw BackendError.authenticationFailed
+                }
+                throw BackendError.serverError("Authentication failed with status \(httpResponse.statusCode)")
+            }
+            
+            // Decode AuthResponse from server (includes user field)
+            struct ServerAuthResponse: Codable {
+                let token: String
+                let expiresAt: Date
+                let userId: UUID
+                let user: UserResponse?
+            }
+            
+            struct UserResponse: Codable {
+                let id: UUID
+                let username: String
+                let email: String
+            }
+            
+            let authResponse = try JSONDecoder().decode(ServerAuthResponse.self, from: data)
+            let token = AuthToken(
+                token: authResponse.token,
+                expiresAt: authResponse.expiresAt,
+                userId: authResponse.userId
+            )
+            self.authToken = token
+            saveAuthToken(token)
+            return token
+        } catch let urlError as URLError {
+            // Handle network errors with better messages
+            switch urlError.code {
+            case .notConnectedToInternet:
+                throw BackendError.networkError
+            case .cannotConnectToHost, .timedOut:
+                throw BackendError.serverError("Cannot connect to server at \(baseURL). Make sure the server is running.")
+            default:
+                throw BackendError.serverError("Network error: \(urlError.localizedDescription)")
+            }
+        } catch let backendError as BackendError {
+            throw backendError
+        } catch {
+            throw BackendError.serverError("Login failed: \(error.localizedDescription)")
         }
-        
-        let token = try JSONDecoder().decode(AuthToken.self, from: data)
-        self.authToken = token
-        saveAuthToken(token)
-        return token
     }
     
     func registerUser(username: String, email: String, password: String) async throws -> AuthToken {
-        let endpoint = APIEndpoint.register.rawValue
+        let endpoint = "/api/auth/register"  // Match server route
         let url = URL(string: "\(baseURL)\(endpoint)")!
         
         var request = URLRequest(url: url)
@@ -91,23 +126,64 @@ class BackendService {
         ]
         request.httpBody = try JSONEncoder().encode(body)
         
-        let (data, response) = try await session.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw BackendError.invalidResponse
-        }
-        
-        guard httpResponse.statusCode == 201 else {
-            if httpResponse.statusCode == 409 {
-                throw BackendError.serverError("Username or email already exists")
+        do {
+            let (data, response) = try await session.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw BackendError.invalidResponse
             }
-            throw BackendError.serverError("Registration failed with status \(httpResponse.statusCode)")
+            
+            guard httpResponse.statusCode == 201 else {
+                // Try to decode error message from response
+                if let errorData = try? JSONDecoder().decode([String: String].self, from: data),
+                   let reason = errorData["reason"] {
+                    throw BackendError.serverError(reason)
+                }
+                
+                if httpResponse.statusCode == 409 {
+                    throw BackendError.serverError("Username or email already exists")
+                }
+                throw BackendError.serverError("Registration failed with status \(httpResponse.statusCode)")
+            }
+            
+            // Decode AuthResponse from server (includes user field)
+            struct ServerAuthResponse: Codable {
+                let token: String
+                let expiresAt: Date
+                let userId: UUID
+                let user: UserResponse?
+            }
+            
+            struct UserResponse: Codable {
+                let id: UUID
+                let username: String
+                let email: String
+            }
+            
+            let authResponse = try JSONDecoder().decode(ServerAuthResponse.self, from: data)
+            let token = AuthToken(
+                token: authResponse.token,
+                expiresAt: authResponse.expiresAt,
+                userId: authResponse.userId
+            )
+            self.authToken = token
+            saveAuthToken(token)
+            return token
+        } catch let urlError as URLError {
+            // Handle network errors with better messages
+            switch urlError.code {
+            case .notConnectedToInternet:
+                throw BackendError.networkError
+            case .cannotConnectToHost, .timedOut:
+                throw BackendError.serverError("Cannot connect to server at \(baseURL). Make sure the server is running.")
+            default:
+                throw BackendError.serverError("Network error: \(urlError.localizedDescription)")
+            }
+        } catch let backendError as BackendError {
+            throw backendError
+        } catch {
+            throw BackendError.serverError("Registration failed: \(error.localizedDescription)")
         }
-        
-        let token = try JSONDecoder().decode(AuthToken.self, from: data)
-        self.authToken = token
-        saveAuthToken(token)
-        return token
     }
     
     // MARK: - Statistics Sync
@@ -284,12 +360,27 @@ class BackendService {
 
 // MARK: - Backend Errors
 
-enum BackendError: Error {
+enum BackendError: Error, LocalizedError {
     case notImplemented
     case networkError
     case invalidResponse
     case authenticationFailed
     case serverError(String)
+    
+    var errorDescription: String? {
+        switch self {
+        case .notImplemented:
+            return "This feature is not yet implemented"
+        case .networkError:
+            return "No internet connection. Please check your network settings."
+        case .invalidResponse:
+            return "Invalid response from server"
+        case .authenticationFailed:
+            return "Invalid username or password"
+        case .serverError(let message):
+            return message
+        }
+    }
 }
 
 // MARK: - Auth Token
