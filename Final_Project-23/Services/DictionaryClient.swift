@@ -4,8 +4,8 @@
 //
 //  Created by Arjun Avadhani on 11/15/25.
 //
-//  Dictionary client following isowords architecture pattern
-//  Can load from local file or query backend API
+//  Dictionary client using free public API (dictionaryapi.dev)
+//  Falls back to embedded dictionary for offline use
 //
 
 import Foundation
@@ -13,53 +13,31 @@ import Foundation
 class DictionaryClient {
     static let shared = DictionaryClient()
     
-    private var dictionary: Set<String> = []
-    private var isLoaded = false
-    private let dictionaryFileName = "dictionary"
-    private let dictionaryFileExtension = "txt"
+    // Cache for validated words (to avoid repeated API calls)
+    private var validatedWords: Set<String> = []
+    private var invalidWords: Set<String> = []
+    
+    // Fallback embedded dictionary for offline use
+    private var fallbackDictionary: Set<String> = []
+    
+    // API endpoint - free, no API key required
+    private let apiBaseURL = "https://api.dictionaryapi.dev/api/v2/entries/en"
+    
+    private let session: URLSession
     
     private init() {
-        loadDictionary()
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 5 // 5 second timeout
+        config.timeoutIntervalForResource = 10
+        self.session = URLSession(configuration: config)
+        
+        // Load fallback dictionary for offline use
+        loadFallbackDictionary()
     }
     
-    // MARK: - Dictionary Loading
+    // MARK: - Fallback Dictionary Loading
     
-    func loadDictionary() {
-        guard !isLoaded else { return }
-        
-        // Try to load from bundle first
-        if let bundlePath = Bundle.main.path(forResource: dictionaryFileName, ofType: dictionaryFileExtension),
-           let dictionaryContent = try? String(contentsOfFile: bundlePath) {
-            loadDictionary(from: dictionaryContent)
-            isLoaded = true
-            return
-        }
-        
-        // Fallback: Try to load from Documents directory (for downloaded dictionaries)
-        if let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
-           let dictionaryURL = URL(string: "\(documentsPath)/\(dictionaryFileName).\(dictionaryFileExtension)"),
-           let dictionaryContent = try? String(contentsOf: dictionaryURL) {
-            loadDictionary(from: dictionaryContent)
-            isLoaded = true
-            return
-        }
-        
-        // Fallback: Use embedded dictionary if file not found
-        loadEmbeddedDictionary()
-        isLoaded = true
-    }
-    
-    private func loadDictionary(from content: String) {
-        let words = content
-            .components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty && $0.count >= 3 }
-            .map { $0.uppercased() }
-        
-        dictionary = Set(words)
-    }
-    
-    private func loadEmbeddedDictionary() {
+    private func loadFallbackDictionary() {
         // Fallback embedded dictionary - minimal set
         let embeddedWords = """
         CAT DOG BAT RAT MAT HAT SAT FAT
@@ -180,8 +158,8 @@ class DictionaryClient {
         LISK LISP LIST LITE LITH LITS LITU LIVE
         LOAD LOAF LOAM LOAN LOBE LOBO LOBS LOCA
         LOCH LOCI LOCK LOCO LODE LOESS LOFT LOGE
-        LOGO LOGS LOGY LOID LOIN LOIR LOKE LOLL
-        LOLO LOMA LOME LONE LONG LOOF LOOK LOOM
+        LOG LOGO LOGS LOGY LOID LOIN LOIR LOKE LOLL
+        LOLO LOMA LOME         LONE LONG LOOF LOOK LOOM LOG
         LOON LOOP LOOR LOOS LOOT LOPE LOPS LORD
         LORE LORN LORY LOSE LOSH LOSS LOST LOTA
         LOTE LOTH LOTI LOTO LOTS LOUD LOUN LOUP
@@ -527,30 +505,112 @@ class DictionaryClient {
         ZOUK ZULU ZUPA ZURF ZYGA ZYME ZZZS
         """
         
-        loadDictionary(from: embeddedWords)
+        let words = embeddedWords
+            .components(separatedBy: .whitespaces)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && $0.count >= 3 }
+            .map { $0.uppercased() }
+        
+        fallbackDictionary = Set(words)
     }
     
-    // MARK: - Word Validation
+    // MARK: - Word Validation (Online API)
     
+    /// Validates a word using the online dictionary API
+    /// Falls back to embedded dictionary if offline
+    func isValidWord(_ word: String) async -> Bool {
+        let uppercaseWord = word.uppercased()
+        
+        // Minimum word length check
+        guard uppercaseWord.count >= 3 else { return false }
+        
+        // Check cache first
+        if validatedWords.contains(uppercaseWord) {
+            return true
+        }
+        if invalidWords.contains(uppercaseWord) {
+            return false
+        }
+        
+        // Try online API first
+        if let isValid = await checkWordOnline(uppercaseWord) {
+            if isValid {
+                validatedWords.insert(uppercaseWord)
+            } else {
+                invalidWords.insert(uppercaseWord)
+            }
+            return isValid
+        }
+        
+        // Fallback to embedded dictionary if API fails (offline mode)
+        let isValid = fallbackDictionary.contains(uppercaseWord)
+        if isValid {
+            validatedWords.insert(uppercaseWord)
+        } else {
+            invalidWords.insert(uppercaseWord)
+        }
+        return isValid
+    }
+    
+    /// Synchronous version for backward compatibility (uses fallback dictionary)
     func isValidWord(_ word: String) -> Bool {
         let uppercaseWord = word.uppercased()
-        return dictionary.contains(uppercaseWord) && uppercaseWord.count >= 3
+        
+        // Check cache first
+        if validatedWords.contains(uppercaseWord) {
+            return true
+        }
+        if invalidWords.contains(uppercaseWord) {
+            return false
+        }
+        
+        // Use fallback dictionary for synchronous calls
+        let isValid = fallbackDictionary.contains(uppercaseWord) && uppercaseWord.count >= 3
+        if isValid {
+            validatedWords.insert(uppercaseWord)
+        } else {
+            invalidWords.insert(uppercaseWord)
+        }
+        return isValid
     }
     
+    /// Checks if a prefix could be a valid word (for word building)
     func isPrefix(_ prefix: String) -> Bool {
         let uppercasePrefix = prefix.uppercased()
-        return dictionary.contains { $0.hasPrefix(uppercasePrefix) }
+        
+        // Check if any cached word starts with this prefix
+        if validatedWords.contains(where: { $0.hasPrefix(uppercasePrefix) }) {
+            return true
+        }
+        
+        // Check fallback dictionary
+        return fallbackDictionary.contains { $0.hasPrefix(uppercasePrefix) }
+    }
+    
+    /// Checks word online using dictionaryapi.dev
+    private func checkWordOnline(_ word: String) async -> Bool? {
+        guard let url = URL(string: "\(apiBaseURL)/\(word)") else {
+            return nil
+        }
+        
+        do {
+            let (_, response) = try await session.data(from: url)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                return nil
+            }
+            
+            // 200 = word found (valid)
+            // 404 = word not found (invalid)
+            return httpResponse.statusCode == 200
+        } catch {
+            // Network error - return nil to trigger fallback
+            return nil
+        }
     }
     
     func containsWord(_ word: String) -> Bool {
-        return dictionary.contains(word.uppercased())
-    }
-    
-    // MARK: - Backend Dictionary Sync (Future)
-    
-    func syncDictionaryFromBackend() async throws {
-        // TODO: Fetch dictionary from backend API
-        // This would download the latest dictionary file from the server
+        return isValidWord(word)
     }
 }
 

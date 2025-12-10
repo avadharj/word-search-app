@@ -10,13 +10,13 @@ import Foundation
 // MARK: - Backend Service
 // Handles communication with PostgreSQL backend API
 
-class BackendService {
+class BackendService: ObservableObject {
     static let shared = BackendService()
     
     // Configure with actual backend URL
     private let baseURL: String
     private let session: URLSession
-    private var authToken: AuthToken?
+    @Published private var authToken: AuthToken?
     
     private init() {
         // Set backend URL - defaults to localhost for development
@@ -27,6 +27,9 @@ class BackendService {
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 60
         self.session = URLSession(configuration: config)
+        
+        // Load token from UserDefaults on initialization
+        _ = getAuthToken()
     }
     
     // MARK: - API Endpoints
@@ -39,6 +42,8 @@ class BackendService {
         case auth = "/api/auth"
         case register = "/api/register"
         case dictionary = "/api/dictionary"
+        case dailyChallenge = "/api/daily-challenge"
+        case dailyChallengeLeaderboard = "/api/daily-challenge/leaderboard"
     }
     
     // MARK: - Authentication
@@ -57,14 +62,22 @@ class BackendService {
         ]
         request.httpBody = try JSONEncoder().encode(body)
         
+        var responseData: Data?
         do {
             let (data, response) = try await session.data(for: request)
+            responseData = data
             
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw BackendError.invalidResponse
             }
             
             guard httpResponse.statusCode == 200 else {
+                // Try to decode error message from response
+                if let errorData = try? JSONDecoder().decode([String: String].self, from: data),
+                   let reason = errorData["reason"] {
+                    throw BackendError.serverError(reason)
+                }
+                
                 if httpResponse.statusCode == 401 {
                     throw BackendError.authenticationFailed
                 }
@@ -85,7 +98,11 @@ class BackendService {
                 let email: String
             }
             
-            let authResponse = try JSONDecoder().decode(ServerAuthResponse.self, from: data)
+            // Configure JSON decoder for ISO8601 dates (Vapor default)
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            
+            let authResponse = try decoder.decode(ServerAuthResponse.self, from: data)
             let token = AuthToken(
                 token: authResponse.token,
                 expiresAt: authResponse.expiresAt,
@@ -93,7 +110,31 @@ class BackendService {
             )
             self.authToken = token
             saveAuthToken(token)
+            // Notify observers that authentication state changed
+            objectWillChange.send()
             return token
+        } catch let decodingError as DecodingError {
+            // Better error message for decoding failures
+            let errorMessage: String
+            switch decodingError {
+            case .typeMismatch(let type, let context):
+                errorMessage = "Type mismatch: expected \(type), path: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))"
+            case .valueNotFound(let type, let context):
+                errorMessage = "Value not found: \(type), path: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))"
+            case .keyNotFound(let key, let context):
+                errorMessage = "Key not found: \(key.stringValue), path: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))"
+            case .dataCorrupted(let context):
+                errorMessage = "Data corrupted: \(context.debugDescription)"
+            @unknown default:
+                errorMessage = "Decoding error: \(decodingError.localizedDescription)"
+            }
+            
+            // Log the actual response for debugging
+            if let data = responseData, let responseString = String(data: data, encoding: .utf8) {
+                print("Server response: \(responseString)")
+            }
+            
+            throw BackendError.serverError("Login failed: \(errorMessage)")
         } catch let urlError as URLError {
             // Handle network errors with better messages
             switch urlError.code {
@@ -107,6 +148,10 @@ class BackendService {
         } catch let backendError as BackendError {
             throw backendError
         } catch {
+            // Log the actual response for debugging
+            if let data = responseData, let responseString = String(data: data, encoding: .utf8) {
+                print("Server response: \(responseString)")
+            }
             throw BackendError.serverError("Login failed: \(error.localizedDescription)")
         }
     }
@@ -126,14 +171,17 @@ class BackendService {
         ]
         request.httpBody = try JSONEncoder().encode(body)
         
+        var responseData: Data?
         do {
             let (data, response) = try await session.data(for: request)
+            responseData = data
             
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw BackendError.invalidResponse
             }
             
-            guard httpResponse.statusCode == 201 else {
+            // Accept both 200 (OK) and 201 (Created) as success
+            guard (200...299).contains(httpResponse.statusCode) else {
                 // Try to decode error message from response
                 if let errorData = try? JSONDecoder().decode([String: String].self, from: data),
                    let reason = errorData["reason"] {
@@ -160,7 +208,11 @@ class BackendService {
                 let email: String
             }
             
-            let authResponse = try JSONDecoder().decode(ServerAuthResponse.self, from: data)
+            // Configure JSON decoder for ISO8601 dates (Vapor default)
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            
+            let authResponse = try decoder.decode(ServerAuthResponse.self, from: data)
             let token = AuthToken(
                 token: authResponse.token,
                 expiresAt: authResponse.expiresAt,
@@ -168,7 +220,31 @@ class BackendService {
             )
             self.authToken = token
             saveAuthToken(token)
+            // Notify observers that authentication state changed
+            objectWillChange.send()
             return token
+        } catch let decodingError as DecodingError {
+            // Better error message for decoding failures
+            let errorMessage: String
+            switch decodingError {
+            case .typeMismatch(let type, let context):
+                errorMessage = "Type mismatch: expected \(type), path: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))"
+            case .valueNotFound(let type, let context):
+                errorMessage = "Value not found: \(type), path: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))"
+            case .keyNotFound(let key, let context):
+                errorMessage = "Key not found: \(key.stringValue), path: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))"
+            case .dataCorrupted(let context):
+                errorMessage = "Data corrupted: \(context.debugDescription)"
+            @unknown default:
+                errorMessage = "Decoding error: \(decodingError.localizedDescription)"
+            }
+            
+            // Log the actual response for debugging
+            if let data = responseData, let responseString = String(data: data, encoding: .utf8) {
+                print("Server response: \(responseString)")
+            }
+            
+            throw BackendError.serverError("Registration failed: \(errorMessage)")
         } catch let urlError as URLError {
             // Handle network errors with better messages
             switch urlError.code {
@@ -182,6 +258,10 @@ class BackendService {
         } catch let backendError as BackendError {
             throw backendError
         } catch {
+            // Log the actual response for debugging
+            if let data = responseData, let responseString = String(data: data, encoding: .utf8) {
+                print("Server response: \(responseString)")
+            }
             throw BackendError.serverError("Registration failed: \(error.localizedDescription)")
         }
     }
@@ -261,18 +341,52 @@ class BackendService {
             let rank: Int
         }
         
-        let serverEntries = try JSONDecoder().decode([ServerLeaderboardEntry].self, from: data)
-        let leaderboard = serverEntries.map { entry in
-            LeaderboardEntry(
-                id: entry.id,
-                playerName: entry.playerName,
-                score: entry.score,
-                wordsFound: entry.wordsFound,
-                date: entry.date,
-                rank: entry.rank
-            )
+        // Configure JSON decoder for ISO8601 dates (Vapor default)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        
+        do {
+            let serverEntries = try decoder.decode([ServerLeaderboardEntry].self, from: data)
+            let leaderboard = serverEntries.map { entry in
+                LeaderboardEntry(
+                    id: entry.id,
+                    playerName: entry.playerName,
+                    score: entry.score,
+                    wordsFound: entry.wordsFound,
+                    date: entry.date,
+                    rank: entry.rank
+                )
+            }
+            return leaderboard
+        } catch let decodingError as DecodingError {
+            // Better error message for decoding failures
+            let errorMessage: String
+            switch decodingError {
+            case .typeMismatch(let type, let context):
+                errorMessage = "Type mismatch: expected \(type), path: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))"
+            case .valueNotFound(let type, let context):
+                errorMessage = "Value not found: \(type), path: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))"
+            case .keyNotFound(let key, let context):
+                errorMessage = "Key not found: \(key.stringValue), path: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))"
+            case .dataCorrupted(let context):
+                errorMessage = "Data corrupted: \(context.debugDescription)"
+            @unknown default:
+                errorMessage = "Decoding error: \(decodingError.localizedDescription)"
+            }
+            
+            // Log the actual response for debugging
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("Leaderboard server response: \(responseString)")
+            }
+            
+            throw BackendError.serverError("Failed to decode leaderboard: \(errorMessage)")
+        } catch {
+            // Log the actual response for debugging
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("Leaderboard server response: \(responseString)")
+            }
+            throw BackendError.serverError("Failed to fetch leaderboard: \(error.localizedDescription)")
         }
-        return leaderboard
     }
     
     // MARK: - Game History Sync
@@ -338,11 +452,21 @@ class BackendService {
     }
     
     private func getAuthToken() -> AuthToken? {
+        // Return cached token if available
+        if let token = authToken, token.expiresAt > Date() {
+            return token
+        }
+        
+        // Try to load from UserDefaults
         if let data = UserDefaults.standard.data(forKey: "authToken"),
            let token = try? JSONDecoder().decode(AuthToken.self, from: data) {
             // Check if token is expired
             if token.expiresAt > Date() {
+                authToken = token // Update cached token
                 return token
+            } else {
+                // Token expired, remove it
+                UserDefaults.standard.removeObject(forKey: "authToken")
             }
         }
         return nil
@@ -351,10 +475,102 @@ class BackendService {
     func logout() {
         authToken = nil
         UserDefaults.standard.removeObject(forKey: "authToken")
+        // Notify observers that authentication state changed
+        objectWillChange.send()
     }
     
     var isAuthenticated: Bool {
-        return getAuthToken() != nil
+        return authToken != nil || getAuthToken() != nil
+    }
+    
+    // MARK: - Daily Challenge
+    
+    func submitDailyChallengeResult(challengeId: String, score: Int, wordsFound: Int) async throws {
+        guard let token = getAuthToken() else {
+            throw BackendError.authenticationFailed
+        }
+        
+        let endpoint = APIEndpoint.dailyChallenge.rawValue
+        let url = URL(string: "\(baseURL)\(endpoint)")!
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token.token)", forHTTPHeaderField: "Authorization")
+        
+        let body: [String: Any] = [
+            "challengeId": challengeId,
+            "score": score,
+            "wordsFound": wordsFound
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (_, response) = try await session.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw BackendError.invalidResponse
+        }
+        
+        guard httpResponse.statusCode == 200 || httpResponse.statusCode == 201 else {
+            throw BackendError.serverError("Failed to submit daily challenge result with status \(httpResponse.statusCode)")
+        }
+    }
+    
+    func fetchDailyChallengeLeaderboard(challengeId: String, limit: Int = 100) async throws -> [DailyChallengeLeaderboardEntry] {
+        let endpoint = APIEndpoint.dailyChallengeLeaderboard.rawValue
+        var components = URLComponents(string: "\(baseURL)\(endpoint)")!
+        components.queryItems = [
+            URLQueryItem(name: "challengeId", value: challengeId),
+            URLQueryItem(name: "limit", value: "\(limit)")
+        ]
+        
+        guard let url = components.url else {
+            throw BackendError.invalidResponse
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // Optional: Add auth token if available
+        if let token = getAuthToken() {
+            request.setValue("Bearer \(token.token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let (data, response) = try await session.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw BackendError.invalidResponse
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            throw BackendError.serverError("Failed to fetch daily challenge leaderboard with status \(httpResponse.statusCode)")
+        }
+        
+        // Decode server response
+        struct ServerDailyChallengeEntry: Codable {
+            let id: UUID
+            let playerName: String
+            let score: Int
+            let wordsFound: Int
+            let date: Date
+            let rank: Int
+        }
+        
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        
+        let serverEntries = try decoder.decode([ServerDailyChallengeEntry].self, from: data)
+        let leaderboard = serverEntries.map { entry in
+            DailyChallengeLeaderboardEntry(
+                id: entry.id,
+                playerName: entry.playerName,
+                score: entry.score,
+                wordsFound: entry.wordsFound,
+                rank: entry.rank
+            )
+        }
+        return leaderboard
     }
 }
 

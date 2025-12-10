@@ -2,8 +2,8 @@ import Vapor
 import JWT
 import Fluent
 
-struct UserTokenAuthenticator: AsyncMiddleware {
-    func respond(to request: Request, chainingTo next: AsyncResponder) -> EventLoopFuture<Response> {
+struct UserTokenAuthenticator: Middleware {
+    func respond(to request: Request, chainingTo next: Responder) -> EventLoopFuture<Response> {
         guard let bearerToken = request.headers.bearerAuthorization?.token else {
             return request.eventLoop.makeFailedFuture(Abort(.unauthorized, reason: "Missing authorization token"))
         }

@@ -13,11 +13,12 @@ struct StatisticsController: RouteCollection {
     func syncStatistics(req: Request) throws -> EventLoopFuture<HTTPStatus> {
         let user = try req.auth.require(User.self)
         let statsRequest = try req.content.decode(StatisticsRequest.self)
+        let userID = try user.requireID()
         
         return GameStatistics.query(on: req.db)
-            .filter(\.$user.$id == user.requireID())
+            .filter(\.$user.$id == userID)
             .first()
-            .flatMap { existingStats in
+            .flatMapThrowing { existingStats -> EventLoopFuture<HTTPStatus> in
                 if let stats = existingStats {
                     // Update existing
                     stats.totalGames = statsRequest.totalGames
@@ -31,7 +32,7 @@ struct StatisticsController: RouteCollection {
                 } else {
                     // Create new
                     let stats = GameStatistics(
-                        userID: user.requireID(),
+                        userID: try user.requireID(),
                         totalGames: statsRequest.totalGames,
                         totalWords: statsRequest.totalWords,
                         totalScore: statsRequest.totalScore,
@@ -41,13 +42,15 @@ struct StatisticsController: RouteCollection {
                     return stats.create(on: req.db).transform(to: .created)
                 }
             }
+            .flatMap { $0 }
     }
     
     func getStatistics(req: Request) throws -> EventLoopFuture<GameStatistics> {
         let user = try req.auth.require(User.self)
+        let userID = try user.requireID()
         
         return GameStatistics.query(on: req.db)
-            .filter(\.$user.$id == user.requireID())
+            .filter(\.$user.$id == userID)
             .first()
             .unwrap(or: Abort(.notFound, reason: "Statistics not found"))
     }

@@ -1,13 +1,14 @@
 import Vapor
-import Bcrypt
+import BCrypt
 
 struct PasswordHasher {
     static func hash(_ password: String) throws -> String {
-        return try Bcrypt.hash(password)
+        let digest = try Hash.make(message: password)
+        return digest.makeString()
     }
     
     static func verify(_ password: String, hash: String) throws -> Bool {
-        return try Bcrypt.verify(password, created: hash)
+        return try Hash.verify(message: password, matches: hash)
     }
 }
 

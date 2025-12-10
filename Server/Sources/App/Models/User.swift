@@ -51,6 +51,8 @@ extension User {
 
 // User authentication is handled via JWT tokens, not ModelAuthenticatable
 
+import JWTKit
+
 struct UserTokenPayload: JWTPayload {
     var userId: UUID
     var exp: ExpirationClaim

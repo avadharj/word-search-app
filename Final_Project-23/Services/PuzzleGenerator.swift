@@ -19,6 +19,7 @@ class PuzzleGenerator {
         "HAS", "HIM", "HIS", "HOW", "ITS", "MAY", "NEW", "NOW",
         "OLD", "SEE", "TWO", "WHO", "BOY", "DID", "LET", "PUT",
         "SAY", "SHE", "TOO", "USE", "WORD", "ABLE", "BACK", "BALL",
+        "LOG", "BOG", "COG", "DOG", "FOG", "HOG", "JOG", "TOG",
         "BAND", "BANK", "BASE", "BEAR", "BEAT", "BEEN", "BELL", "BEST",
         "BILL", "BIRD", "BLOW", "BLUE", "BOAT", "BODY", "BOOK", "BORN",
         "BOTH", "BOYS", "BUSY", "CALL", "CALM", "CAME", "CAMP", "CARD",
@@ -38,9 +39,31 @@ class PuzzleGenerator {
         let totalCells = size * size * size
         var letterGrid = Array(repeating: Array(repeating: Array(repeating: Character("A"), count: size), count: size), count: size)
         
-        // First, try to embed some valid words
-        let wordsToEmbed = selectWordsForEmbedding(size: size, difficulty: difficulty)
-        validWords = embedWords(wordsToEmbed, into: &letterGrid, size: size)
+        // Try multiple times to embed words until we get at least some valid words
+        var attempts = 0
+        let maxAttempts = 10
+        
+        while validWords.isEmpty && attempts < maxAttempts {
+            // Reset grid
+            letterGrid = Array(repeating: Array(repeating: Array(repeating: Character("A"), count: size), count: size), count: size)
+            
+            // Try to embed words
+            let wordsToEmbed = selectWordsForEmbedding(size: size, difficulty: difficulty)
+            validWords = embedWords(wordsToEmbed, into: &letterGrid, size: size)
+            attempts += 1
+        }
+        
+        // If still no words, use a simpler approach - embed at least one word manually
+        if validWords.isEmpty {
+            // Embed a simple 3-letter word like "CAT" or "DOG" in a straight line
+            let fallbackWords = ["CAT", "DOG", "BAT", "RAT", "MAT", "HAT"]
+            for word in fallbackWords.shuffled() {
+                if let embedded = embedSimpleWord(word, into: &letterGrid, size: size) {
+                    validWords.insert(embedded)
+                    break
+                }
+            }
+        }
         
         // Fill remaining cells with random letters
         fillRemainingCells(&letterGrid, size: size)
@@ -113,8 +136,8 @@ class PuzzleGenerator {
     }
     
     private func findValidPath(for word: String, in grid: [[[Character]]], size: Int, excluding usedPositions: Set<[Int]>) -> [[Int]]? {
-        // Try multiple random starting positions
-        for _ in 0..<50 {
+        // Try multiple random starting positions - increased attempts for better success rate
+        for _ in 0..<200 {
             let startX = Int.random(in: 0..<size)
             let startY = Int.random(in: 0..<size)
             let startZ = Int.random(in: 0..<size)
@@ -197,6 +220,61 @@ class PuzzleGenerator {
                 }
             }
         }
+    }
+    
+    // Fallback method to embed a simple word in a straight line
+    private func embedSimpleWord(_ word: String, into grid: inout [[[Character]]], size: Int) -> String? {
+        // Try to embed word in a straight line (horizontal, vertical, or diagonal in 3D)
+        let directions = [
+            (1, 0, 0), (-1, 0, 0), // X axis
+            (0, 1, 0), (0, -1, 0), // Y axis
+            (0, 0, 1), (0, 0, -1), // Z axis
+            (1, 1, 0), (1, 0, 1), (0, 1, 1), // Diagonals
+            (-1, -1, 0), (-1, 0, -1), (0, -1, -1)
+        ]
+        
+        for _ in 0..<100 {
+            let startX = Int.random(in: 0..<size)
+            let startY = Int.random(in: 0..<size)
+            let startZ = Int.random(in: 0..<size)
+            
+            let direction = directions.randomElement()!
+            let (dx, dy, dz) = direction
+            
+            // Check if word fits in this direction
+            var fits = true
+            var positions: [[Int]] = []
+            
+            for i in 0..<word.count {
+                let x = startX + dx * i
+                let y = startY + dy * i
+                let z = startZ + dz * i
+                
+                if x < 0 || x >= size || y < 0 || y >= size || z < 0 || z >= size {
+                    fits = false
+                    break
+                }
+                
+                let char = grid[z][y][x]
+                if char != "A" && char != word[word.index(word.startIndex, offsetBy: i)] {
+                    fits = false
+                    break
+                }
+                
+                positions.append([x, y, z])
+            }
+            
+            if fits {
+                // Place the word
+                for (i, pos) in positions.enumerated() {
+                    let char = word[word.index(word.startIndex, offsetBy: i)]
+                    grid[pos[2]][pos[1]][pos[0]] = char
+                }
+                return word
+            }
+        }
+        
+        return nil
     }
 }
 

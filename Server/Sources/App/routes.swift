@@ -6,5 +6,6 @@ func routes(_ app: Application) throws {
     try app.register(collection: LeaderboardController())
     try app.register(collection: GameHistoryController())
     try app.register(collection: DictionaryController())
+    try app.register(collection: DailyChallengeController())
 }
 

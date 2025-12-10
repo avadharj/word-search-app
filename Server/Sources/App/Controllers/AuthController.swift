@@ -28,7 +28,7 @@ struct AuthController: RouteCollection {
                 return User.query(on: req.db)
                     .filter(\.$email == registerRequest.email)
                     .first()
-                    .flatMap { existingEmail in
+                    .flatMapThrowing { existingEmail -> EventLoopFuture<AuthResponse> in
                         if existingEmail != nil {
                             return req.eventLoop.makeFailedFuture(Abort(.conflict, reason: "Email already exists"))
                         }
@@ -41,9 +41,9 @@ struct AuthController: RouteCollection {
                             passwordHash: passwordHash
                         )
                         
-                        return user.save(on: req.db).flatMap {
+                        return user.save(on: req.db).flatMapThrowing {
                             let expiration = Date().addingTimeInterval(3600 * 24 * 7) // 7 days
-                            let token = try! user.generateToken()
+                            let token = try user.generateToken()
                             
                             let response = AuthResponse(
                                 token: token,
@@ -52,9 +52,10 @@ struct AuthController: RouteCollection {
                                 user: UserResponse(id: user.id!, username: user.username, email: user.email)
                             )
                             
-                            return req.eventLoop.makeSucceededFuture(response)
+                            return response
                         }
                     }
+                    .flatMap { $0 }
             }
     }
     
@@ -66,13 +67,13 @@ struct AuthController: RouteCollection {
             .filter(\.$username == authRequest.username)
             .first()
             .unwrap(or: Abort(.unauthorized, reason: "Invalid credentials"))
-            .flatMap { user in
+            .flatMapThrowing { user in
                 guard try PasswordHasher.verify(authRequest.password, hash: user.passwordHash) else {
-                    return req.eventLoop.makeFailedFuture(Abort(.unauthorized, reason: "Invalid credentials"))
+                    throw Abort(.unauthorized, reason: "Invalid credentials")
                 }
                 
                 let expiration = Date().addingTimeInterval(3600 * 24 * 7) // 7 days
-                let token = try! user.generateToken()
+                let token = try user.generateToken()
                 
                 let response = AuthResponse(
                     token: token,
@@ -81,7 +82,7 @@ struct AuthController: RouteCollection {
                     user: UserResponse(id: user.id!, username: user.username, email: user.email)
                 )
                 
-                return req.eventLoop.makeSucceededFuture(response)
+                return response
             }
     }
 }

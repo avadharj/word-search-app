@@ -21,13 +21,37 @@ struct LeaderboardView: View {
                         .foregroundColor(.secondary)
                 }
             } else if let errorMessage = errorMessage {
-                Text("Error: \(errorMessage)")
-                    .foregroundColor(.red)
-                    .font(.caption)
+                VStack(spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 40))
+                        .foregroundColor(.orange)
+                    Text("Error: \(errorMessage)")
+                        .foregroundColor(.red)
+                        .font(.caption)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
             } else if leaderboard.isEmpty {
-                Text("No leaderboard data")
-                    .foregroundColor(.secondary)
-                    .font(.caption)
+                VStack(spacing: 12) {
+                    Image(systemName: "trophy")
+                        .font(.system(size: 40))
+                        .foregroundColor(.secondary)
+                    Text("No leaderboard data yet")
+                        .foregroundColor(.secondary)
+                        .font(.headline)
+                    Text("Be the first to play and sync your score!")
+                        .foregroundColor(.secondary)
+                        .font(.caption)
+                        .multilineTextAlignment(.center)
+                    Text("Make sure you've synced your progress after playing a game.")
+                        .foregroundColor(.secondary)
+                        .font(.caption2)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 4)
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
             } else {
                 ForEach(leaderboard) { entry in
                     HStack {
@@ -74,11 +98,31 @@ struct LeaderboardView: View {
                 await MainActor.run {
                     leaderboard = entries
                     isLoading = false
+                    if entries.isEmpty {
+                        print("⚠️ Leaderboard is empty - no players have synced scores yet")
+                        print("💡 Make sure you've played a game and tapped 'Sync Progress' in Settings")
+                    } else {
+                        print("✅ Loaded \(entries.count) leaderboard entries")
+                    }
                 }
             } catch {
                 await MainActor.run {
-                    errorMessage = error.localizedDescription
+                    let errorMsg: String
+                    if let backendError = error as? BackendError {
+                        switch backendError {
+                        case .networkError:
+                            errorMsg = "Cannot connect to server. Make sure the server is running."
+                        case .authenticationFailed:
+                            errorMsg = "Please sign in to view the leaderboard."
+                        default:
+                            errorMsg = "Error: \(error.localizedDescription)"
+                        }
+                    } else {
+                        errorMsg = "Error: \(error.localizedDescription)"
+                    }
+                    errorMessage = errorMsg
                     isLoading = false
+                    print("❌ Leaderboard error: \(error)")
                 }
             }
         }
@@ -92,4 +136,3 @@ struct LeaderboardView: View {
         }
     }
 }
-

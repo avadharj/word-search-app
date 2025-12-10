@@ -27,7 +27,16 @@ class GameEngine {
         let uppercaseWord = word.uppercased()
         guard uppercaseWord.count >= 3 else { return false }
         guard !foundWords.contains(uppercaseWord) else { return false }
+        // Use synchronous version (uses fallback dictionary for quick validation)
         return dictionaryClient.isValidWord(uppercaseWord)
+    }
+    
+    /// Async version that uses online API for accurate validation
+    func validateWordAsync(_ word: String, foundWords: [String]) async -> Bool {
+        let uppercaseWord = word.uppercased()
+        guard uppercaseWord.count >= 3 else { return false }
+        guard !foundWords.contains(uppercaseWord) else { return false }
+        return await dictionaryClient.isValidWord(uppercaseWord)
     }
     
     func buildWord(from indices: [Int], cube: Cube) -> String {
@@ -52,39 +61,43 @@ class GameEngine {
             let word = buildWord(from: gameState.selectedIndices, cube: cube)
             gameState.currentWord = word
             
-            // Check if it's a valid word
-            if validateWord(word, foundWords: gameState.wordsFound) {
-                // Word is valid - add it
-                gameState.addWord(word)
+            // Check if it's a valid word (async validation with online API)
+            Task { @MainActor in
+                let isValid = await validateWordAsync(word, foundWords: gameState.wordsFound)
                 
-                // Play success sound and haptic
-                soundManager.playSound("wordFound")
-                soundManager.playHaptic(.success)
-                
-                // Mark letters as used
-                for selectedIndex in gameState.selectedIndices {
-                    gameState.cube.useLetter(at: selectedIndex)
-                }
-                
-                // Check if any letters were removed
-                let removedCount = gameState.selectedIndices.filter { 
-                    cube.letter(at: $0)?.isRemoved == true 
-                }.count
-                
-                if removedCount > 0 {
-                    soundManager.playSound("letterRemove")
-                    soundManager.playHaptic(.medium)
-                }
-                
-                // Reset selection
-                gameState.resetSelection()
-            } else {
-                // Check if it's a valid prefix
-                if !dictionaryClient.isPrefix(word) {
-                    // Invalid prefix - reset selection
-                    soundManager.playSound("wordInvalid")
-                    soundManager.playHaptic(.error)
+                if isValid {
+                    // Word is valid - add it
+                    gameState.addWord(word)
+                    
+                    // Play success sound and haptic
+                    soundManager.playSound("wordFound")
+                    soundManager.playHaptic(.success)
+                    
+                    // Mark letters as used
+                    for selectedIndex in gameState.selectedIndices {
+                        gameState.cube.useLetter(at: selectedIndex)
+                    }
+                    
+                    // Check if any letters were removed
+                    let removedCount = gameState.selectedIndices.filter { 
+                        cube.letter(at: $0)?.isRemoved == true 
+                    }.count
+                    
+                    if removedCount > 0 {
+                        soundManager.playSound("letterRemove")
+                        soundManager.playHaptic(.medium)
+                    }
+                    
+                    // Reset selection
                     gameState.resetSelection()
+                } else {
+                    // Check if it's a valid prefix
+                    if !dictionaryClient.isPrefix(word) {
+                        // Invalid prefix - reset selection
+                        soundManager.playSound("wordInvalid")
+                        soundManager.playHaptic(.error)
+                        gameState.resetSelection()
+                    }
                 }
             }
         } else if gameState.selectedIndices.contains(index) {
@@ -101,4 +114,3 @@ class GameEngine {
         }
     }
 }
-

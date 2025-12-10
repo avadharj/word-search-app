@@ -10,6 +10,9 @@ import SwiftUI
 struct SettingsView: View {
     // --- CONFLICT RESOLVED: KEEPING DEV'S STATE OBJECTS AND VARIABLES ---
     @ObservedObject private var soundManager = SoundManager.shared
+    @ObservedObject private var locationManager = LocationManager.shared
+    @ObservedObject private var backendService = BackendService.shared
+    @ObservedObject private var motionManager = MotionManager.shared
     @AppStorage("difficulty") private var difficulty = "Medium"
     @State private var showAbout = false
     @State private var showHelp = false
@@ -76,11 +79,55 @@ struct SettingsView: View {
             }
             // ----------------------------------
             
+            Section("Motion Controls") {
+                Toggle(isOn: Binding(
+                    get: { motionManager.motionEnabled },
+                    set: { motionManager.setMotionEnabled($0) }
+                )) {
+                    Label("Motion Controls", systemImage: "gyroscope")
+                }
+                .disabled(!motionManager.isMotionAvailable)
+                
+                if !motionManager.isMotionAvailable {
+                    Text("Motion sensors not available on this device")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                if motionManager.motionEnabled && motionManager.isMotionAvailable {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Sensitivity")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        
+                        HStack {
+                            Text("Low")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            Slider(value: Binding(
+                                get: { motionManager.motionSensitivity },
+                                set: { motionManager.setMotionSensitivity($0) }
+                            ), in: 0.0...2.0)
+                            
+                            Text("High")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Text("Tilt your device to rotate the cube. Shake to reset camera.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            
             Section("Location Services") {
                 HStack {
                     Label("Location Access", systemImage: "location.fill")
                     Spacer()
-                    if LocationManager.shared.isAuthorized {
+                    if locationManager.isAuthorized {
                         Text("Enabled")
                             .foregroundColor(.green)
                             .font(.caption)
@@ -91,24 +138,32 @@ struct SettingsView: View {
                     }
                 }
                 
-                if !LocationManager.shared.isAuthorized {
+                if !locationManager.isAuthorized {
                     Button(action: {
-                        LocationManager.shared.requestLocationPermission()
+                        locationManager.requestLocationPermission()
                     }) {
                         Label("Enable Location", systemImage: "location.circle.fill")
+                    }
+                } else if locationManager.hasLocation {
+                    HStack {
+                        Label("Your Location", systemImage: "mappin.circle.fill")
+                        Spacer()
+                        Text(locationManager.locationName)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                 }
             }
             
             Section("Account") {
                 // --- CONFLICT RESOLVED: KEEPING DEV'S SIGN IN/OUT LOGIC ---
-                if BackendService.shared.isAuthenticated {
+                if backendService.isAuthenticated {
                     HStack {
                         Label("Signed In", systemImage: "checkmark.circle.fill")
                             .foregroundColor(.green)
                         Spacer()
                         Button("Sign Out") {
-                            BackendService.shared.logout()
+                            backendService.logout()
                         }
                         .foregroundColor(.red)
                     }
@@ -132,7 +187,7 @@ struct SettingsView: View {
                 }) {
                     Label("Sync Progress", systemImage: "arrow.clockwise.circle.fill")
                 }
-                .disabled(!BackendService.shared.isAuthenticated)
+                .disabled(!backendService.isAuthenticated)
                 // ----------------------------------------------------------
             }
         }

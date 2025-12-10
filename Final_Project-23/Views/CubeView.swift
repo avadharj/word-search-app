@@ -12,6 +12,7 @@ import UIKit
 
 struct CubeView: UIViewRepresentable {
     @ObservedObject var gameState: GameState
+    @ObservedObject private var motionManager = MotionManager.shared
     let onLetterSelected: (Int) -> Void
     
     func makeUIView(context: Context) -> SCNView {
@@ -22,22 +23,18 @@ struct CubeView: UIViewRepresentable {
         sceneView.backgroundColor = UIColor.systemGroupedBackground
         sceneView.autoenablesDefaultLighting = true
         
-        // Disable automatic camera control to avoid conflicts with tap detection
         sceneView.allowsCameraControl = false
         
-        // Add tap gesture - make it more responsive
         let tapGesture = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
         tapGesture.numberOfTapsRequired = 1
         tapGesture.numberOfTouchesRequired = 1
         sceneView.addGestureRecognizer(tapGesture)
         
-        // Add pan gesture for manual camera rotation
         let panGesture = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePan(_:)))
         panGesture.minimumNumberOfTouches = 1
         panGesture.maximumNumberOfTouches = 1
         sceneView.addGestureRecognizer(panGesture)
         
-        // Add pinch gesture for zoom
         let pinchGesture = UIPinchGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePinch(_:)))
         sceneView.addGestureRecognizer(pinchGesture)
         
@@ -46,25 +43,31 @@ struct CubeView: UIViewRepresentable {
         context.coordinator.onLetterSelected = onLetterSelected
         context.coordinator.cameraNode = scene.rootNode.childNodes.first { $0.camera != nil }
         context.coordinator.initialCameraDistance = 8.0
+        context.coordinator.motionManager = motionManager
         
-        // Initial render
+        motionManager.startMotionUpdates()
+        context.coordinator.startMotionUpdates()
+        
         updateCubeVisualization(in: scene, gameState: gameState, coordinator: context.coordinator)
         
         return sceneView
     }
     
     func updateUIView(_ uiView: SCNView, context: Context) {
-        // Update cube visualization based on game state
         if let scene = uiView.scene {
             updateCubeVisualization(in: scene, gameState: gameState, coordinator: context.coordinator)
         }
         context.coordinator.gameState = gameState
+        context.coordinator.motionManager = motionManager
+    }
+    
+    static func dismantleUIView(_ uiView: SCNView, coordinator: Coordinator) {
+        coordinator.stopMotionUpdates()
     }
     
     private func createScene() -> SCNScene {
         let scene = SCNScene()
         
-        // Add camera - position it to see the cube better
         let cameraNode = SCNNode()
         cameraNode.camera = SCNCamera()
         cameraNode.camera?.fieldOfView = 60
@@ -72,7 +75,6 @@ struct CubeView: UIViewRepresentable {
         cameraNode.look(at: SCNVector3(x: 0, y: 0, z: 0))
         scene.rootNode.addChildNode(cameraNode)
         
-        // Add ambient light - brighter for better visibility
         let ambientLight = SCNLight()
         ambientLight.type = .ambient
         ambientLight.color = UIColor.white.withAlphaComponent(0.8)
@@ -80,7 +82,6 @@ struct CubeView: UIViewRepresentable {
         ambientNode.light = ambientLight
         scene.rootNode.addChildNode(ambientNode)
         
-        // Add directional light from multiple angles
         let directionalLight1 = SCNLight()
         directionalLight1.type = .directional
         directionalLight1.color = UIColor.white
@@ -91,7 +92,6 @@ struct CubeView: UIViewRepresentable {
         directionalNode1.look(at: SCNVector3(x: 0, y: 0, z: 0))
         scene.rootNode.addChildNode(directionalNode1)
         
-        // Add second directional light from opposite side
         let directionalLight2 = SCNLight()
         directionalLight2.type = .directional
         directionalLight2.color = UIColor.white.withAlphaComponent(0.5)
@@ -108,16 +108,13 @@ struct CubeView: UIViewRepresentable {
     private func updateCubeVisualization(in scene: SCNScene?, gameState: GameState, coordinator: Coordinator) {
         guard let scene = scene else { return }
         
-        // Remove existing cube nodes
         scene.rootNode.childNodes.filter { $0.name?.hasPrefix("letterNode_") == true || $0.name == "cubeNode" }.forEach { $0.removeFromParentNode() }
         
-        // Clear the node index mapping
         coordinator.nodeIndexMap.removeAll()
         
         let cube = gameState.cube
         let spacing: Float = 1.2
         
-        // Create letter nodes
         for (index, letter) in cube.letters.enumerated() {
             let letterNode = createLetterNode(
                 letter: letter,
@@ -132,7 +129,6 @@ struct CubeView: UIViewRepresentable {
     
     private func createLetterNode(letter: Letter, index: Int, isSelected: Bool, spacing: Float, coordinator: Coordinator) -> SCNNode {
         let node = SCNNode()
-        // Store index in node name for identification
         node.name = "letterNode_\(index)"
         node.position = SCNVector3(
             letter.position.x * spacing,
@@ -140,12 +136,10 @@ struct CubeView: UIViewRepresentable {
             letter.position.z * spacing
         )
         
-        // Create background box - make it more visible
         let boxSize: CGFloat = 0.8
         let box = SCNBox(width: boxSize, height: boxSize, length: boxSize, chamferRadius: 0.15)
         let boxMaterial = SCNMaterial()
         
-        // Color based on state
         if letter.isRemoved {
             boxMaterial.diffuse.contents = UIColor.systemGray
             boxMaterial.emission.contents = UIColor.systemGray.withAlphaComponent(0.2)
@@ -153,7 +147,6 @@ struct CubeView: UIViewRepresentable {
             boxMaterial.diffuse.contents = UIColor.systemBlue
             boxMaterial.emission.contents = UIColor.systemBlue.withAlphaComponent(0.5)
         } else {
-            // Use a light gray/white background that contrasts well with black text
             boxMaterial.diffuse.contents = UIColor.white
             boxMaterial.emission.contents = UIColor.white.withAlphaComponent(0.3)
         }
@@ -164,7 +157,6 @@ struct CubeView: UIViewRepresentable {
         let boxNode = SCNNode(geometry: box)
         boxNode.position = SCNVector3(0, 0, 0)
         
-        // Add selection animation
         if isSelected && !letter.isRemoved {
             let scaleUp = SCNAction.scale(to: 1.15, duration: 0.2)
             let scaleDown = SCNAction.scale(to: 1.0, duration: 0.2)
@@ -172,7 +164,6 @@ struct CubeView: UIViewRepresentable {
             boxNode.runAction(SCNAction.repeatForever(pulse), forKey: "selectionPulse")
         }
         
-        // Add removal animation
         if letter.isRemoved {
             let fadeOut = SCNAction.fadeOut(duration: 0.5)
             let scaleDown = SCNAction.scale(to: 0.1, duration: 0.5)
@@ -181,29 +172,24 @@ struct CubeView: UIViewRepresentable {
             node.runAction(sequence)
         }
         
-        // Create text using a plane with text rendered as an image - more reliable
         let textImage = createTextImage(character: letter.character, isSelected: isSelected, isRemoved: letter.isRemoved)
         let textPlane = SCNPlane(width: 0.6, height: 0.6)
         let textMaterial = SCNMaterial()
         textMaterial.diffuse.contents = textImage
         textMaterial.isDoubleSided = true
-        textMaterial.lightingModel = .constant // Always visible
+        textMaterial.lightingModel = .constant
         textPlane.firstMaterial = textMaterial
         
         let textNode = SCNNode(geometry: textPlane)
-        
-        // Position text on the front face of the box
         textNode.position = SCNVector3(0, 0, Float(boxSize) / 2 + 0.01)
-        textNode.eulerAngles = SCNVector3(0, 0, 0) // Face forward
+        textNode.eulerAngles = SCNVector3(0, 0, 0)
         
-        // Make the box node the main tappable node
         boxNode.name = "letterBox_\(index)"
         textNode.name = "letterText_\(index)"
         
         node.addChildNode(boxNode)
         node.addChildNode(textNode)
         
-        // Store index mapping in coordinator - prioritize box for tapping
         coordinator.nodeIndexMap[node] = index
         coordinator.nodeIndexMap[boxNode] = index
         coordinator.nodeIndexMap[textNode] = index
@@ -216,7 +202,6 @@ struct CubeView: UIViewRepresentable {
         let renderer = UIGraphicsImageRenderer(size: size)
         
         return renderer.image { context in
-            // Fill background
             var bgColor: UIColor
             var textColor: UIColor
             
@@ -234,7 +219,6 @@ struct CubeView: UIViewRepresentable {
             bgColor.setFill()
             context.fill(CGRect(origin: .zero, size: size))
             
-            // Draw text
             let text = String(character).uppercased()
             let font = UIFont.systemFont(ofSize: 120, weight: .bold)
             
@@ -264,6 +248,11 @@ struct CubeView: UIViewRepresentable {
         var lastPanLocation: CGPoint?
         var cameraNode: SCNNode?
         var initialCameraDistance: Float = 8.0
+        var motionManager: MotionManager?
+        var motionUpdateTimer: CADisplayLink?
+        
+        var motionRotationX: Float = 0.0
+        var motionRotationY: Float = 0.0
         
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
             guard let sceneView = sceneView,
@@ -272,7 +261,6 @@ struct CubeView: UIViewRepresentable {
             
             let location = gesture.location(in: sceneView)
             
-            // Use more detailed hit test options
             let hitTestOptions: [SCNHitTestOption: Any] = [
                 .searchMode: SCNHitTestSearchMode.all.rawValue,
                 .ignoreHiddenNodes: false,
@@ -281,11 +269,9 @@ struct CubeView: UIViewRepresentable {
             
             let hitResults = sceneView.hitTest(location, options: hitTestOptions)
             
-            // Try to find the index from the node mapping or node name
             for hitResult in hitResults {
                 var foundIndex: Int?
                 
-                // First try to get from mapping (check the node and its parent)
                 if let index = nodeIndexMap[hitResult.node] {
                     foundIndex = index
                 } else if let parent = hitResult.node.parent,
@@ -293,7 +279,6 @@ struct CubeView: UIViewRepresentable {
                     foundIndex = index
                 }
                 
-                // If not found in mapping, try to extract from node name
                 if foundIndex == nil {
                     if let nodeName = hitResult.node.name {
                         if nodeName.hasPrefix("letterBox_") || nodeName.hasPrefix("letterText_") || nodeName.hasPrefix("letterNode_") {
@@ -304,7 +289,6 @@ struct CubeView: UIViewRepresentable {
                         }
                     }
                     
-                    // Also check parent node name
                     if foundIndex == nil, let parent = hitResult.node.parent,
                        let parentName = parent.name {
                         if parentName.hasPrefix("letterBox_") || parentName.hasPrefix("letterNode_") {
@@ -316,7 +300,6 @@ struct CubeView: UIViewRepresentable {
                     }
                 }
                 
-                // If we found an index, trigger the selection
                 if let index = foundIndex {
                     onLetterSelected?(index)
                     return
@@ -331,16 +314,12 @@ struct CubeView: UIViewRepresentable {
             let translation = gesture.translation(in: sceneView)
             let velocity = gesture.velocity(in: sceneView)
             
-            // Only rotate if it's a clear pan (not a tap)
             if abs(velocity.x) > 50 || abs(velocity.y) > 50 || gesture.state == .changed {
-                // Rotate camera around the cube
                 let rotationSpeed: Float = 0.01
                 let deltaX = Float(translation.x) * rotationSpeed
                 let deltaY = Float(translation.y) * rotationSpeed
                 
-                // Rotate around Y axis (horizontal pan)
                 let rotationY = SCNMatrix4MakeRotation(deltaX, 0, 1, 0)
-                // Rotate around X axis (vertical pan)
                 let rotationX = SCNMatrix4MakeRotation(-deltaY, 1, 0, 0)
                 
                 let currentPosition = cameraNode.position
@@ -350,11 +329,9 @@ struct CubeView: UIViewRepresentable {
                     currentPosition.x * rotationY.m31 + currentPosition.z * rotationY.m33
                 )
                 
-                // Apply vertical rotation
                 let distance = sqrt(newPosition.x * newPosition.x + newPosition.y * newPosition.y + newPosition.z * newPosition.z)
                 newPosition.y = max(-distance * 0.8, min(distance * 0.8, newPosition.y - deltaY * distance))
                 
-                // Normalize and set distance
                 let normalized = normalize(newPosition)
                 cameraNode.position = SCNVector3(
                     normalized.x * initialCameraDistance,
@@ -373,7 +350,7 @@ struct CubeView: UIViewRepresentable {
             if gesture.state == .changed {
                 let scale = Float(gesture.scale)
                 initialCameraDistance = initialCameraDistance / scale
-                initialCameraDistance = max(5.0, min(15.0, initialCameraDistance)) // Limit zoom
+                initialCameraDistance = max(5.0, min(15.0, initialCameraDistance))
                 
                 let normalized = normalize(cameraNode.position)
                 cameraNode.position = SCNVector3(
@@ -391,6 +368,59 @@ struct CubeView: UIViewRepresentable {
             guard length > 0 else { return SCNVector3(0, 0, 1) }
             return SCNVector3(vector.x / length, vector.y / length, vector.z / length)
         }
+        
+        func startMotionUpdates() {
+            guard motionUpdateTimer == nil else { return }
+            
+            motionUpdateTimer = CADisplayLink(target: self, selector: #selector(updateMotionCamera))
+            motionUpdateTimer?.preferredFramesPerSecond = 60
+            motionUpdateTimer?.add(to: .main, forMode: .common)
+        }
+        
+        func stopMotionUpdates() {
+            motionUpdateTimer?.invalidate()
+            motionUpdateTimer = nil
+            motionManager?.stopMotionUpdates()
+        }
+        
+        @objc private func updateMotionCamera() {
+            guard let motionManager = motionManager,
+                  let cameraNode = cameraNode,
+                  motionManager.motionEnabled else {
+                return
+            }
+            
+            let rotationDelta = motionManager.getRotationDelta()
+            
+            motionRotationX += Float(rotationDelta.x)
+            motionRotationY += Float(rotationDelta.y)
+            
+            motionRotationY = max(-Float.pi / 3, min(Float.pi / 3, motionRotationY))
+            
+            let basePosition = SCNVector3(
+                sin(motionRotationX) * cos(motionRotationY) * initialCameraDistance,
+                sin(motionRotationY) * initialCameraDistance,
+                cos(motionRotationX) * cos(motionRotationY) * initialCameraDistance
+            )
+            
+            cameraNode.position = basePosition
+            cameraNode.look(at: SCNVector3(0, 0, 0))
+            
+            if motionManager.isShaking() {
+                handleShake()
+            }
+        }
+        
+        private func handleShake() {
+            motionRotationX = 0.0
+            motionRotationY = 0.0
+            
+            let defaultPosition = SCNVector3(4, 4, 6)
+            let moveAction = SCNAction.move(to: defaultPosition, duration: 0.5)
+            moveAction.timingMode = .easeInEaseOut
+            cameraNode?.runAction(moveAction)
+            
+            SoundManager.shared.playHaptic(.medium)
+        }
     }
 }
-

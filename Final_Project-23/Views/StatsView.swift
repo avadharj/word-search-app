@@ -12,6 +12,7 @@ struct StatsView: View {
     @State private var statistics = DataPersistence.shared.loadStatistics()
     @State private var averageScore: Int = 0
     @ObservedObject private var locationManager = LocationManager.shared
+    @ObservedObject private var backendService = BackendService.shared
     
     private var calculatedAverageScore: Int {
         guard statistics.totalGames > 0 else { return 0 }
@@ -145,7 +146,7 @@ struct StatsView: View {
             
             Section("Leaderboard") {
                 // --- CONFLICT RESOLVED: KEEPING DEV'S LEADERBOARD LOGIC ---
-                if BackendService.shared.isAuthenticated {
+                if backendService.isAuthenticated {
                     LeaderboardView() // Assuming LeaderboardView is a view you added to dev
                 } else {
                     HStack {

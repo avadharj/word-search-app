@@ -38,6 +38,16 @@ struct HomeView: View {
                     // Menu Cards
                     VStack(spacing: 16) {
                         MenuCard(
+                            title: "Daily Challenge",
+                            subtitle: "Today's special puzzle",
+                            icon: "calendar.badge.clock",
+                            color: .orange
+                        ) {
+                            SoundManager.shared.playHaptic(.medium)
+                            navigationPath.append("dailyChallenge")
+                        }
+                        
+                        MenuCard(
                             title: "Play Game",
                             subtitle: "Start a new puzzle",
                             icon: "gamecontroller.fill",
@@ -81,6 +91,17 @@ struct HomeView: View {
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: String.self) { destination in
                 switch destination {
+                case "dailyChallenge":
+                    DailyChallengeView(navigationPath: $navigationPath)
+                case "dailyChallengeGame":
+                    if let challenge = DailyChallengeService.shared.currentChallenge {
+                        DailyChallengeGameView(
+                            challenge: challenge,
+                            navigationPath: $navigationPath
+                        )
+                    } else {
+                        EmptyView()
+                    }
                 case "game":
                     GameView(navigationPath: $navigationPath)
                 case "stats":

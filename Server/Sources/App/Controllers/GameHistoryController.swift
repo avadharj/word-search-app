@@ -14,9 +14,9 @@ struct GameHistoryController: RouteCollection {
         let user = try req.auth.require(User.self)
         let historyRequests = try req.content.decode([GameHistoryRequest].self)
         
-        let histories = historyRequests.map { historyRequest in
+        let histories = try historyRequests.map { historyRequest in
             GameHistory(
-                userID: user.requireID(),
+                userID: try user.requireID(),
                 score: historyRequest.score,
                 wordsFound: historyRequest.wordsFound,
                 words: historyRequest.words
@@ -28,10 +28,11 @@ struct GameHistoryController: RouteCollection {
     
     func getGameHistory(req: Request) throws -> EventLoopFuture<[GameHistory]> {
         let user = try req.auth.require(User.self)
+        let userID = try user.requireID()
         let limit = req.query[Int.self, at: "limit"] ?? 100
         
         return GameHistory.query(on: req.db)
-            .filter(\.$user.$id == user.requireID())
+            .filter(\.$user.$id == userID)
             .sort(\.$playedAt, .descending)
             .limit(limit)
             .all()
