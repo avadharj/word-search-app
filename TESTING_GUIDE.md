@@ -180,17 +180,33 @@ You should see:
 psql wordsearch
 ```
 
+**Note:** If you see duplicate output or get stuck in a pager, press `q` to quit, then run queries with `\pset pager off` to disable the pager.
+
 ```sql
+-- Disable pager for cleaner output (optional)
+\pset pager off
+
 -- See all users
 SELECT username, email FROM users;
 
--- See statistics
-SELECT username, high_score, total_words FROM game_statistics 
-JOIN users ON game_statistics.user_id = users.id;
+-- See statistics with usernames
+SELECT u.username, gs.high_score, gs.total_words, gs.total_games 
+FROM game_statistics gs
+JOIN users u ON gs.user_id = u.id
+ORDER BY gs.high_score DESC;
 
--- See leaderboard data
-SELECT * FROM game_statistics ORDER BY high_score DESC LIMIT 10;
+-- See leaderboard data (simpler query)
+SELECT u.username, gs.high_score, gs.total_words 
+FROM game_statistics gs
+JOIN users u ON gs.user_id = u.id
+ORDER BY gs.high_score DESC 
+LIMIT 10;
+
+-- Exit psql when done
+\q
 ```
+
+**Tip:** If you see the same results repeated multiple times, you're likely in a pager view. Press `q` to exit the pager and see the actual query results.
 
 **Expected:**
 - User data stored in database
@@ -430,8 +446,16 @@ createdb wordsearch
 - Verify database has data:
   ```bash
   psql wordsearch
+  ```
+  ```sql
+  -- Disable pager for cleaner output
+  \pset pager off
+  
   SELECT * FROM game_statistics;
   SELECT * FROM users;
+  
+  -- Exit when done
+  \q
   ```
 - The leaderboard query joins `game_statistics` with `users`, so both must exist
 - Make sure statistics were actually saved (check `high_score` field)
@@ -539,6 +563,7 @@ If you encounter issues:
 6. **Verify database has data:**
    ```bash
    psql wordsearch
+   \pset pager off  -- Disable pager for cleaner output
    SELECT COUNT(*) FROM users;
    SELECT COUNT(*) FROM game_statistics;
    ```
@@ -558,7 +583,12 @@ To verify everything is working, check the database:
 psql wordsearch
 ```
 
+**Important:** If you see duplicate output or results repeated multiple times, you're in the `psql` pager. Press `q` to quit the pager and see clean results. Or disable the pager entirely:
+
 ```sql
+-- Disable pager for cleaner output (recommended)
+\pset pager off
+
 -- See all registered users
 SELECT id, username, email, created_at FROM users;
 
